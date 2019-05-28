@@ -168,6 +168,9 @@ class BertModel(object):
     if token_type_ids is None:
       token_type_ids = tf.zeros(shape=[batch_size, seq_length], dtype=tf.int32)
 
+    if history_answer_marker is None:
+      history_answer_marker = tf.zeros(shape=[batch_size, seq_length], dtype=tf.int32)
+
     with tf.variable_scope(scope, default_name="bert"):
       with tf.variable_scope("embeddings"):
         # Perform embedding lookup on the word ids.
@@ -191,6 +194,10 @@ class BertModel(object):
             position_embedding_name="position_embeddings",
             initializer_range=config.initializer_range,
             max_position_embeddings=config.max_position_embeddings,
+            use_history_answer_embedding=True,
+            history_answer_marker=history_answer_marker,
+            history_answer_embedding_vocab_size=2,
+            history_answer_embedding_name='history_answer_embedding',
             dropout_prob=config.hidden_dropout_prob)
 
       with tf.variable_scope("encoder"):
@@ -434,6 +441,10 @@ def embedding_postprocessor(input_tensor,
                             position_embedding_name="position_embeddings",
                             initializer_range=0.02,
                             max_position_embeddings=512,
+                            use_history_answer_embedding=True,
+                            history_answer_marker=None,
+                            history_answer_embedding_vocab_size=2,
+                            history_answer_embedding_name='history_answer_embedding',
                             dropout_prob=0.1):
   """Performs various post-processing on a word embedding tensor.
 
@@ -485,6 +496,22 @@ def embedding_postprocessor(input_tensor,
     token_type_embeddings = tf.reshape(token_type_embeddings,
                                        [batch_size, seq_length, width])
     output += token_type_embeddings
+
+  if use_history_answer_embedding:
+    if history_answer_marker is None:
+      raise ValueError("`history_answer_marker` must be specified if"
+                       "`use_history_answer_embedding` is True.")
+    history_answer_marker_table = tf.get_variable(
+        name=history_answer_embedding_name,
+        shape=[history_answer_embedding_vocab_size, width],
+        initializer=create_initializer(initializer_range))
+
+    flat_history_answer_marker = tf.reshape(history_answer_marker, [-1])
+    one_hot_ids = tf.one_hot(flat_history_answer_marker, depth=history_answer_embedding_vocab_size)
+    history_answer_embedding = tf.matmul(one_hot_ids, history_answer_marker_table)
+    history_answer_embedding = tf.reshape(history_answer_embedding,
+                                       [batch_size, seq_length, width])
+    output += history_answer_embedding
 
   if use_position_embeddings:
     assert_op = tf.assert_less_equal(seq_length, max_position_embeddings)
