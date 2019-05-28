@@ -405,11 +405,11 @@ def read_quac_examples(input_file, is_training):
         return False
 
     examples = []
-    #if FLAGS.load_small_portion:
-    #    input_data = input_data[:FLAGS.small_portion_num]
-    #    # print('input_data:', input_data)
-    #    print('FLAGS.small_portion_num: {}'.format(FLAGS.small_portion_num))
-    #    tf.logging.warning('<<<<<<<<<< load_small_portion is on! >>>>>>>>>>')
+    if FLAGS.load_small_portion:
+        input_data = input_data[:FLAGS.small_portion_num]
+        # print('input_data:', input_data)
+        print('FLAGS.small_portion_num: {}'.format(FLAGS.small_portion_num))
+        tf.logging.warning('<<<<<<<<<< load_small_portion is on! >>>>>>>>>>')
     for entry in input_data:
         # An additional "CANNOTANSWER" has been added in QuAC data, so no need to append one.
         entry = entry['paragraphs'][0]
