@@ -149,9 +149,55 @@ flags.DEFINE_bool(
     "version_2_with_negative", False,
     "If true, the SQuAD examples contain some that do not have an answer.")
 
+####
+
 flags.DEFINE_float(
     "null_score_diff_threshold", 0.0,
     "If null_score - best_non_null is greater than the threshold predict null.")
+
+flags.DEFINE_integer(
+    "history", 6,
+    "Number of conversation history to use. "
+)
+
+
+flags.DEFINE_bool(
+    "only_history_answer", True,
+    "only prepend history answers without questions?")
+
+flags.DEFINE_bool(
+    "use_history_answer_marker", True,
+    "use markers for hisotory answers instead of prepending them."
+    "This referes to HAE in our implementation. This flag surpasses the only_history_answer flag.")
+
+flags.DEFINE_bool(
+    "load_small_portion", False,
+    "during develping, we only want to load a very small portion of "
+    "the data to see if the code works.")
+
+flags.DEFINE_integer(
+    "small_portion_num", 10,
+    "during develping, we only want to load a very small portion of "
+    "the data to see if the code works. num of data")
+
+
+flags.DEFINE_string("dataset", 'quac', 'dataset name')
+
+flags.DEFINE_string(
+    "cache_dir", "cache",
+    "we store generated features here, so that we do not need to generate them every time")
+
+flags.DEFINE_integer(
+    "max_considered_history_turns", 11,
+    "we only consider k history turns that immediately precede the current turn when generating the features,"
+    "training will be slow if this is set to a large number")
+
+
+flags.DEFINE_integer(
+    "train_steps", 20,
+    "how many train steps")
+
+
 
 
 class SquadExample(object):
