@@ -149,49 +149,97 @@ flags.DEFINE_bool(
     "version_2_with_negative", False,
     "If true, the SQuAD examples contain some that do not have an answer.")
 
+####
+
 flags.DEFINE_float(
     "null_score_diff_threshold", 0.0,
     "If null_score - best_non_null is greater than the threshold predict null.")
 
+flags.DEFINE_integer(
+    "history", 6,
+    "Number of conversation history to use. "
+)
 
-class SquadExample(object):
-  """A single training/test example for simple sequence classification.
 
-     For examples without an answer, the start and end position are -1.
-  """
+flags.DEFINE_bool(
+    "only_history_answer", True,
+    "only prepend history answers without questions?")
 
-  def __init__(self,
-               qas_id,
-               question_text,
-               doc_tokens,
-               orig_answer_text=None,
-               start_position=None,
-               end_position=None,
-               is_impossible=False):
-    self.qas_id = qas_id
-    self.question_text = question_text
-    self.doc_tokens = doc_tokens
-    self.orig_answer_text = orig_answer_text
-    self.start_position = start_position
-    self.end_position = end_position
-    self.is_impossible = is_impossible
+flags.DEFINE_bool(
+    "use_history_answer_marker", True,
+    "use markers for hisotory answers instead of prepending them."
+    "This referes to HAE in our implementation. This flag surpasses the only_history_answer flag.")
 
-  def __str__(self):
-    return self.__repr__()
+flags.DEFINE_bool(
+    "load_small_portion", False,
+    "during develping, we only want to load a very small portion of "
+    "the data to see if the code works.")
 
-  def __repr__(self):
-    s = ""
-    s += "qas_id: %s" % (tokenization.printable_text(self.qas_id))
-    s += ", question_text: %s" % (
-        tokenization.printable_text(self.question_text))
-    s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
-    if self.start_position:
-      s += ", start_position: %d" % (self.start_position)
-    if self.start_position:
-      s += ", end_position: %d" % (self.end_position)
-    if self.start_position:
-      s += ", is_impossible: %r" % (self.is_impossible)
-    return s
+flags.DEFINE_integer(
+    "small_portion_num", 10,
+    "during develping, we only want to load a very small portion of "
+    "the data to see if the code works. num of data")
+
+
+flags.DEFINE_string("dataset", 'quac', 'dataset name')
+
+flags.DEFINE_string(
+    "cache_dir", "cache",
+    "we store generated features here, so that we do not need to generate them every time")
+
+flags.DEFINE_integer(
+    "max_considered_history_turns", 11,
+    "we only consider k history turns that immediately precede the current turn when generating the features,"
+    "training will be slow if this is set to a large number")
+
+
+flags.DEFINE_integer(
+    "train_steps", 20,
+    "how many train steps")
+
+
+
+
+class QuacExample(object):
+    """A single training/test example."""
+
+    def __init__(self,
+                 qas_id,
+                 question_text,
+                 doc_tokens,
+                 orig_answer_text=None,
+                 start_position=None,
+                 end_position=None,
+                 history_answer_marker=None,
+                 metadata=None):
+        self.qas_id = qas_id
+        self.question_text = question_text
+        self.doc_tokens = doc_tokens
+        self.orig_answer_text = orig_answer_text
+        self.start_position = start_position
+        self.end_position = end_position
+        self.history_answer_marker = history_answer_marker
+        self.metadata = metadata
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        s = ""
+        s += "qas_id: %s" % (tokenization.printable_text(self.qas_id))
+        s += ", question_text: %s" % (
+            tokenization.printable_text(self.question_text))
+        s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
+        if self.start_position:
+            s += ", start_position: %d" % (self.start_position)
+        if self.start_position:
+            s += ", end_position: %d" % (self.end_position)
+        if self.history_answer_marker:
+            s += ', history_answer_marker: {}'.format(json.dumps(self.history_answer_marker))
+        if self.metadata:
+            s += ', metadata: ' + json.dumps(self.metadata)
+        return s
+
 
 
 class InputFeatures(object):
@@ -224,90 +272,163 @@ class InputFeatures(object):
     self.is_impossible = is_impossible
 
 
-def read_squad_examples(input_file, is_training):
-  """Read a SQuAD json file into a list of SquadExample."""
-  with tf.gfile.Open(input_file, "r") as reader:
-    input_data = json.load(reader)["data"]
+def read_quac_examples(input_file, is_training):
+    """Read a QuAC json file into a list of CQAExample."""
+    with tf.gfile.Open(input_file, "r") as reader:
+        input_data = json.load(reader)["data"]
 
-  def is_whitespace(c):
-    if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
-      return True
-    return False
+    def is_whitespace(c):
+        if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
+            return True
+        return False
 
-  examples = []
-  for entry in input_data:
-    for paragraph in entry["paragraphs"]:
-      paragraph_text = paragraph["context"]
-      doc_tokens = []
-      char_to_word_offset = []
-      prev_is_whitespace = True
-      for c in paragraph_text:
-        if is_whitespace(c):
-          prev_is_whitespace = True
-        else:
-          if prev_is_whitespace:
-            doc_tokens.append(c)
-          else:
-            doc_tokens[-1] += c
-          prev_is_whitespace = False
-        char_to_word_offset.append(len(doc_tokens) - 1)
+    examples = []
+    if FLAGS.load_small_portion:
+        input_data = input_data[:FLAGS.small_portion_num]
+        # print('input_data:', input_data)
+        print('FLAGS.small_portion_num: {}'.format(FLAGS.small_portion_num))
+        tf.logging.warning('<<<<<<<<<< load_small_portion is on! >>>>>>>>>>')
+    for entry in input_data:
+        # An additional "CANNOTANSWER" has been added in QuAC data, so no need to append one.
+        entry = entry['paragraphs'][0]
+        paragraph_text = entry["context"]
+        doc_tokens = []
+        char_to_word_offset = []
+        prev_is_whitespace = True
+        for c in paragraph_text:
+            if is_whitespace(c):
+                prev_is_whitespace = True
+            else:
+                if prev_is_whitespace:
+                    doc_tokens.append(c)
+                else:
+                    doc_tokens[-1] += c
+                prev_is_whitespace = False
+            char_to_word_offset.append(len(doc_tokens) - 1)
+            
+        ############################################################
+        # convert the convasational QAs to squad format, with history
+        ############################################################
 
-      for qa in paragraph["qas"]:
-        qas_id = qa["id"]
-        question_text = qa["question"]
-        start_position = None
-        end_position = None
-        orig_answer_text = None
-        is_impossible = False
-        if is_training:
+        questions = [(item['question'], item['id']) for item in entry['qas']] # [(question, question_id), ()]
+        answers = [(item['orig_answer']['text'], item['orig_answer']['answer_start']) for item in entry['qas']]
+        followups = [item['followup'] for item in entry['qas']]
+        yesnos = [item['yesno'] for item in entry['qas']]
 
-          if FLAGS.version_2_with_negative:
-            is_impossible = qa["is_impossible"]
-          if (len(qa["answers"]) != 1) and (not is_impossible):
-            raise ValueError(
-                "For training, each question should have exactly 1 answer.")
-          if not is_impossible:
+        qas = []
+        for i, (question, answer, followup, yesno) in enumerate(zip(questions, answers, followups, yesnos)):
+            metadata = {'turn': i + 1, 'history_turns': [], 'tok_history_answer_markers':[], 
+                        'followup': followup, 'yesno': yesno, 'history_turns_text': []}
+            # if FLAGS.use_RL:
+            #     start_index = 0
+            # else:
+            #     start_index = 0 if i - int(FLAGS.history) < 0 else i - int(FLAGS.history)
+            
+            end_index = i
+            question_with_histories = ''
+            
+            history_answer_marker = None
+            if FLAGS.use_history_answer_marker:
+                start_index = 0 # we read all the histories no matter we use RL or not. we will make approporiate selections afterwards
+                history_answer_marker = []
+                for history_turn, (each_answer, each_question) in enumerate(
+                    zip(answers[start_index: end_index], questions[start_index: end_index])):
+                    
+                    # [history_answer_start, history_answer_end, history_answer_text]
+                    each_marker = [each_answer[1], each_answer[1] + len(each_answer[0]), each_answer[0]]
+                    history_answer_marker.append(each_marker)
+                    metadata['history_turns'].append(history_turn + start_index + 1)
+                    metadata['history_turns_text'].append((each_question[0], each_answer[0])) #[(q1, a1), (q2, a2), ...]
+            else:
+                # prepend historical questions and answers
+                start_index = max(end_index - FLAGS.history, 0)
+                if FLAGS.only_history_answer:
+                    for each_answer in answers[start_index: end_index]:
+                        question_with_histories += each_answer[0] + ' '
+                else:
+                    for each_question, each_answer in zip(questions[start_index: end_index], answers[start_index: end_index]):
+                        question_with_histories += each_question[0] + ' ' + each_answer[0] + ' '
+            # add the current question
+            question_with_histories += question[0]
+            qas.append({'id': question[1], 'question': question_with_histories, 'answers': [{'answer_start': answer[1], 'text': answer[0]}],
+                        'history_answer_marker': history_answer_marker, 'metadata': metadata})
+
+        for qa in qas:
+            qas_id = qa["id"]
+            question_text = qa["question"]
+            start_position = None
+            end_position = None
+            orig_answer_text = None
+            
+            # if is_training:
+            # we read in the groundtruth answer bothing druing training and predicting, because we need to compute acc and f1 at predicting time.
+            if len(qa["answers"]) != 1:
+                raise ValueError(
+                    "For training, each question should have exactly 1 answer.")
             answer = qa["answers"][0]
             orig_answer_text = answer["text"]
             answer_offset = answer["answer_start"]
             answer_length = len(orig_answer_text)
             start_position = char_to_word_offset[answer_offset]
-            end_position = char_to_word_offset[answer_offset + answer_length -
-                                               1]
+            end_position = char_to_word_offset[answer_offset + answer_length - 1]
             # Only add answers where the text can be exactly recovered from the
             # document. If this CAN'T happen it's likely due to weird Unicode
             # stuff so we will just skip the example.
             #
             # Note that this means for training mode, every example is NOT
             # guaranteed to be preserved.
-            actual_text = " ".join(
-                doc_tokens[start_position:(end_position + 1)])
+            actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
             cleaned_answer_text = " ".join(
                 tokenization.whitespace_tokenize(orig_answer_text))
-            if actual_text.find(cleaned_answer_text) == -1:
-              tf.logging.warning("Could not find answer: '%s' vs. '%s'",
-                                 actual_text, cleaned_answer_text)
-              continue
-          else:
-            start_position = -1
-            end_position = -1
-            orig_answer_text = ""
+            
+            if is_training and actual_text.find(cleaned_answer_text) == -1:
+                tf.logging.warning("Could not find answer: '%s' vs. '%s'",
+                                   actual_text, cleaned_answer_text)
+                continue
+                
+            # we construct a tok_history_answer_marker to store the aggregated history answer markers for a question.
+            # we also construct each_tok_history_answer_marker to store a single history answer marker.
+            tok_history_answer_marker = [0] * len(doc_tokens)
+            if FLAGS.use_history_answer_marker:
+                for marker_index, marker in enumerate(qa['history_answer_marker']):
+                    each_tok_history_answer_marker = [0] * len(doc_tokens)
+                    history_orig_answer_text = marker[2]
+                    history_answer_offset = marker[0]
+                    history_answer_length = len(history_orig_answer_text)
+                    history_start_position = char_to_word_offset[history_answer_offset]
+                    history_end_position = char_to_word_offset[history_answer_offset + history_answer_length - 1]
+                    history_actual_text = " ".join(doc_tokens[history_start_position:(history_end_position + 1)])
+                    history_cleaned_answer_text = " ".join(tokenization.whitespace_tokenize(history_orig_answer_text))
+                    if history_actual_text.find(history_cleaned_answer_text) != -1:
+                        tok_history_answer_marker = tok_history_answer_marker[: history_start_position] + \
+                                            [1] * (history_end_position - history_start_position + 1) + \
+                                            tok_history_answer_marker[history_end_position + 1 :]
+                        each_tok_history_answer_marker = each_tok_history_answer_marker[: history_start_position] + \
+                                            [1] * (history_end_position - history_start_position + 1) + \
+                                            each_tok_history_answer_marker[history_end_position + 1 :]
+                        assert len(tok_history_answer_marker) == len(doc_tokens)
+                        assert len(each_tok_history_answer_marker) == len(doc_tokens)
+                        qa['metadata']['tok_history_answer_markers'].append(each_tok_history_answer_marker)
+                    else:
+                        tf.logging.warning("Could not find history answer: '%s' vs. '%s'", history_actual_text, history_cleaned_answer_text)                                    
 
-        example = SquadExample(
-            qas_id=qas_id,
-            question_text=question_text,
-            doc_tokens=doc_tokens,
-            orig_answer_text=orig_answer_text,
-            start_position=start_position,
-            end_position=end_position,
-            is_impossible=is_impossible)
-        examples.append(example)
+            example = QuacExample(
+                qas_id=qas_id,
+                question_text=question_text,
+                doc_tokens=doc_tokens,
+                orig_answer_text=orig_answer_text,
+                start_position=start_position,
+                end_position=end_position,
+                history_answer_marker=tok_history_answer_marker,
+                metadata=qa['metadata'])
+            examples.append(example)
+            # print(example)
+    return examples
 
-  return examples
 
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
-                                 doc_stride, max_query_length, is_training,
+                                 doc_stride, max_query_length, max_considered_history_turns, is_training,
                                  output_fn):
   """Loads a data file into a list of `InputBatch`s."""
 
@@ -1155,7 +1276,7 @@ def main(_):
   num_train_steps = None
   num_warmup_steps = None
   if FLAGS.do_train:
-    train_examples = read_squad_examples(
+    train_examples = read_quac_examples(
         input_file=FLAGS.train_file, is_training=True)
     num_train_steps = int(
         len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
@@ -1196,6 +1317,7 @@ def main(_):
         max_seq_length=FLAGS.max_seq_length,
         doc_stride=FLAGS.doc_stride,
         max_query_length=FLAGS.max_query_length,
+        max_considered_history_turns=FLAGS.max_considered_history_turns,
         is_training=True,
         output_fn=train_writer.process_feature)
     train_writer.close()
