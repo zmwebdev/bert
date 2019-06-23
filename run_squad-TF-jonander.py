@@ -1291,7 +1291,6 @@ def main(_):
   if FLAGS.do_train:
     # We write to a temporary file to avoid storing very large constant tensors
     # in memory.
-
     train_writer_filename = None
     if not FLAGS.train_tf_record:
       train_writer = FeatureWriter(
