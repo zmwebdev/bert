@@ -157,10 +157,6 @@ flags.DEFINE_string(
     "train_tf_record", None,
     "previously generated train features filename: gs://.../train.tf_record")
 
-flags.DEFINE_string(
-    "eval_tf_record", None,
-    "previously generated eval features filename: gs://.../train.tf_record")
-
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
@@ -1234,29 +1230,24 @@ def main(_):
     eval_examples = read_squad_examples(
         input_file=FLAGS.predict_file, is_training=False)
 
-    eval_writer_filename = None
-    if not FLAGS.eval_tf_record:
-      eval_writer = FeatureWriter(
-          filename=os.path.join(FLAGS.output_dir, "eval.tf_record"),
-          is_training=False)
-      eval_features = []
+    eval_writer = FeatureWriter(
+        filename=os.path.join(FLAGS.output_dir, "eval.tf_record"),
+        is_training=False)
+    eval_features = []
 
-      def append_feature(feature):
-        eval_features.append(feature)
-        eval_writer.process_feature(feature)
+    def append_feature(feature):
+      eval_features.append(feature)
+      eval_writer.process_feature(feature)
 
-      convert_examples_to_features(
-          examples=eval_examples,
-          tokenizer=tokenizer,
-          max_seq_length=FLAGS.max_seq_length,
-          doc_stride=FLAGS.doc_stride,
-          max_query_length=FLAGS.max_query_length,
-          is_training=False,
-          output_fn=append_feature)
-      eval_writer.close()
-      eval_writer_filename = eval_writer.filename
-    else:
-      eval_writer_filename = FLAGS.eval_tf_record
+    convert_examples_to_features(
+        examples=eval_examples,
+        tokenizer=tokenizer,
+        max_seq_length=FLAGS.max_seq_length,
+        doc_stride=FLAGS.doc_stride,
+        max_query_length=FLAGS.max_query_length,
+        is_training=False,
+        output_fn=append_feature)
+    eval_writer.close()
 
     tf.logging.info("***** Running predictions *****")
     tf.logging.info("  Num orig examples = %d", len(eval_examples))
@@ -1267,7 +1258,7 @@ def main(_):
     all_results = []
 
     predict_input_fn = input_fn_builder(
-        input_file=eval_writer_filename,
+        input_file=eval_writer.filename,
         seq_length=FLAGS.max_seq_length,
         is_training=False,
         drop_remainder=False)
