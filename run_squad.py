@@ -1217,7 +1217,8 @@ def main(_):
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Num orig examples = %d", len(train_examples))
-    tf.logging.info("  Num split examples = %d", train_writer.num_features)
+    if not FLAGS.train_tf_record:
+      tf.logging.info("  Num split examples = %d", train_writer.num_features)
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
     tf.logging.info("  Num steps = %d", num_train_steps)
     del train_examples
