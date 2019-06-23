@@ -1260,7 +1260,7 @@ def main(_):
 
     tf.logging.info("***** Running predictions *****")
     tf.logging.info("  Num orig examples = %d", len(eval_examples))
-    if FLAGS.do_predict:
+    if not FLAGS.eval_tf_record:
       tf.logging.info("  Num split examples = %d", len(eval_features))
     tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
