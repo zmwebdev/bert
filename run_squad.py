@@ -1224,7 +1224,7 @@ def main(_):
     del train_examples
 
     train_input_fn = input_fn_builder(
-        input_file=train_writer.filename,
+        input_file=train_writer_filename,
         seq_length=FLAGS.max_seq_length,
         is_training=True,
         drop_remainder=True)
