@@ -1191,7 +1191,6 @@ def main(_):
   if FLAGS.do_train:
     # We write to a temporary file to avoid storing very large constant tensors
     # in memory.
-
     train_writer_filename = None
     if not FLAGS.train_tf_record:
       train_writer = FeatureWriter(
@@ -1208,8 +1207,7 @@ def main(_):
       train_writer.close()
       train_writer_filename = train_writer.filename
     else:
-      train_writer_filename = FLAGS.train_tf_record
-
+        train_writer_filename = FLAGS.train_tf_record
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Num orig examples = %d", len(train_examples))
@@ -1225,6 +1223,7 @@ def main(_):
         is_training=True,
         drop_remainder=True)
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
+
 
   if FLAGS.do_predict:
     eval_examples = read_squad_examples(
