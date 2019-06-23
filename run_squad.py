@@ -153,6 +153,14 @@ flags.DEFINE_float(
     "null_score_diff_threshold", 0.0,
     "If null_score - best_non_null is greater than the threshold predict null.")
 
+flags.DEFINE_string(
+    "train_tf_record", None,
+    "previously generated train features filename: gs://.../train.tf_record")
+
+flags.DEFINE_string(
+    "eval_tf_record", None,
+    "previously generated eval features filename: gs://.../train.tf_record")
+
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
@@ -1187,18 +1195,25 @@ def main(_):
   if FLAGS.do_train:
     # We write to a temporary file to avoid storing very large constant tensors
     # in memory.
-    train_writer = FeatureWriter(
-        filename=os.path.join(FLAGS.output_dir, "train.tf_record"),
-        is_training=True)
-    convert_examples_to_features(
-        examples=train_examples,
-        tokenizer=tokenizer,
-        max_seq_length=FLAGS.max_seq_length,
-        doc_stride=FLAGS.doc_stride,
-        max_query_length=FLAGS.max_query_length,
-        is_training=True,
-        output_fn=train_writer.process_feature)
-    train_writer.close()
+
+    train_writer_filename = None
+    if not FLAGS.train_tf_record:
+      train_writer = FeatureWriter(
+          filename=os.path.join(FLAGS.output_dir, "train.tf_record"),
+          is_training=True)
+      convert_examples_to_features(
+          examples=train_examples,
+          tokenizer=tokenizer,
+          max_seq_length=FLAGS.max_seq_length,
+          doc_stride=FLAGS.doc_stride,
+          max_query_length=FLAGS.max_query_length,
+          is_training=True,
+          output_fn=train_writer.process_feature)
+      train_writer.close()
+      train_writer_filename = train_writer.filename
+    else:
+      train_writer_filename = FLAGS.train_tf_record
+
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Num orig examples = %d", len(train_examples))
