@@ -1307,6 +1307,7 @@ def main(_):
       train_writer.close()
       train_writer_filename = train_writer.filename
     else:
+        tf.logging.info("***** Reading train_tf_record *****")
         train_writer_filename = FLAGS.train_tf_record
 
     tf.logging.info("***** Running training *****")
