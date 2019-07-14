@@ -28,8 +28,9 @@ with open(args.file) as json_data:
         line["qid"].append(key)
         line["yesno"].append("x")
         line["followup"].append("o")
-            
 
+    # append the last
+    data.append(line)
 
 # fitxategia reset
 open(args.out, 'w').close()
